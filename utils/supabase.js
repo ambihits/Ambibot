@@ -10,26 +10,18 @@ async function storeRedemption({ key, discord_id, role, redeemed_at, expires_at 
 
   console.log("🚀 Inserting into Supabase:", JSON.stringify(payload, null, 2));
 
-  const { error } = await supabase.from("redemptions").insert([payload]);
+  const { error, data, status, statusText } = await supabase
+    .from("redemptions")
+    .insert(payload);
 
   if (error) {
     console.error("🔥 Supabase Insert Error:", JSON.stringify(error, null, 2));
+    console.error("⚠️ Status:", status, "|", statusText);
+    return { error };
   }
 
-  return { error };
+  console.log("✅ Successfully inserted row:", JSON.stringify(data, null, 2));
+  return { error: null };
 }
 
-async function checkKeyUsed(key) {
-  const { data } = await supabase
-    .from("redemptions")
-    .select("key")
-    .eq("key", key)
-    .maybeSingle();
-
-  return !!data;
-}
-
-module.exports = {
-  storeRedemption,
-  checkKeyUsed
-};
+module.exports = { storeRedemption };
