@@ -14,3 +14,4 @@ AmbiBot — Discord License Bot for AmbiHits
 
 ✅ Use /redeem KEY in Discord
 ✅ Sell.app can POST to /sellapp for auto role sync
+// force redeploy
