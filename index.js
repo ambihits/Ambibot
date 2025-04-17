@@ -1,53 +1,104 @@
-const express = require("express");
-const { Client, GatewayIntentBits, Collection } = require("discord.js");
 require("dotenv").config();
-const { validateKey } = require("./utils/keyStore");
+const fs = require("fs");
+const path = require("path");
+const express = require("express");
+const { Client, Collection, GatewayIntentBits } = require("discord.js");
+const { createClient } = require("@supabase/supabase-js");
 
-const app = express();
+// Initialize Discord client
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 client.commands = new Collection();
 
-const redeem = require("./commands/redeem");
-const daysleft = require("./commands/daysleft");
-client.commands.set("redeem", redeem);
-client.commands.set("daysleft", daysleft);
+// Load commands from /commands folder
+const commandsPath = path.join(__dirname, "commands");
+const commandFiles = fs
+  .readdirSync(commandsPath)
+  .filter(file => file.endsWith(".js"));
+
+for (const file of commandFiles) {
+  const command = require(`./commands/${file}`);
+  client.commands.set(command.data.name, command);
+}
+
+// Supabase connection
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+// Webhook API (e.g. for AIMsharp license checks)
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("✅ AmbiBot is online");
+});
+
+app.get("/license-status/:discord_id", async (req, res) => {
+  const { discord_id } = req.params;
+
+  try {
+    const { data, error } = await supabase
+      .from("redemptions")
+      .select("*")
+      .eq("discord_id", discord_id)
+      .order("redeemed_at", { ascending: false })
+      .maybeSingle();
+
+    if (error || !data) {
+      return res.status(404).json({ valid: false, message: "License not found." });
+    }
+
+    const now = new Date();
+    const expires = new Date(data.expires_at);
+    const msLeft = expires - now;
+    const daysLeft = Math.max(0, Math.floor(msLeft / (1000 * 60 * 60 * 24)));
+
+    res.json({
+      valid: expires > now,
+      role: data.role,
+      daysLeft,
+      expiresAt: data.expires_at
+    });
+
+  } catch (err) {
+    console.error("License check error:", err);
+    res.status(500).json({ valid: false, message: "Server error." });
+  }
+});
+
+// Start the webhook server
+app.listen(3000, () => {
+  console.log("🌐 Webhook server running");
+});
+
+// Handle slash commands
+client.on("interactionCreate", async interaction => {
+  if (!interaction.isCommand()) return;
+
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
+
+  try {
+    await command.execute(interaction, client);
+  } catch (error) {
+    console.error(error);
+    await interaction.reply({
+      content: "There was an error executing that command.",
+      ephemeral: true,
+    });
+  }
+});
 
 client.once("ready", () => {
   console.log(`✅ AmbiBot is online as ${client.user.tag}`);
 });
 
-client.on("interactionCreate", async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-  const command = client.commands.get(interaction.commandName);
-  if (command) {
-    await command.execute(interaction, client);
-  }
-});
-
-// Webhook for Sell.app
-app.use(express.json());
-app.post("/sellapp", async (req, res) => {
-  const { license, metadata } = req.body;
-  const key = license?.key;
-  const discordId = metadata?.discord_id;
-
-  if (!key || !discordId) return res.sendStatus(400);
-
-  const guild = await client.guilds.fetch(process.env.GUILD_ID);
-  const member = await guild.members.fetch(discordId).catch(() => null);
-
-  if (member) {
-    const roleName = key.startsWith("TRIAL") ? process.env.ROLE_TRIAL : process.env.ROLE_ALL_ACCESS;
-    const role = guild.roles.cache.get(roleName);
-    if (role) await member.roles.add(role);
-    console.log(`✅ Assigned ${role.name} to ${member.user.username}`);
-  }
-
-  res.sendStatus(200);
-});
-
 client.login(process.env.DISCORD_TOKEN);
-app.listen(process.env.PORT || 3000, () => console.log("🌐 Webhook server running"));
