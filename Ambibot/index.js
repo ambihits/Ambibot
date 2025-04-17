@@ -41,6 +41,12 @@ app.post("/sellapp", async (req, res) => {
 
   if (member) {
     const roleName = key.startsWith("TRIAL") ? process.env.ROLE_TRIAL : process.env.ROLE_ALL_ACCESS;
+    const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🌐 Webhook server running at http://localhost:${PORT}`);
+  console.log(`🔗 If you're on Railway, check the Deployment logs for your public URL`);
+});
+
     const role = guild.roles.cache.get(roleName);
     if (role) await member.roles.add(role);
     console.log(`✅ Assigned ${role.name} to ${member.user.username}`);
