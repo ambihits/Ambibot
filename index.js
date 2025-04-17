@@ -5,6 +5,12 @@ const express = require("express");
 const { Client, Collection, GatewayIntentBits } = require("discord.js");
 const { createClient } = require("@supabase/supabase-js");
 
+// Initialize Supabase
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
 // Initialize Discord client
 const client = new Client({
   intents: [
@@ -17,7 +23,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Load commands from /commands folder
+// Load slash commands from /commands
 const commandsPath = path.join(__dirname, "commands");
 const commandFiles = fs
   .readdirSync(commandsPath)
@@ -28,19 +34,15 @@ for (const file of commandFiles) {
   client.commands.set(command.data.name, command);
 }
 
-// Supabase connection
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
-
-// Webhook API (e.g. for AIMsharp license checks)
+// Setup Express Web API
 const app = express();
 
+// Root test
 app.get("/", (req, res) => {
   res.send("✅ AmbiBot is online");
 });
 
+// AIMsharp license check endpoint
 app.get("/license-status/:discord_id", async (req, res) => {
   const { discord_id } = req.params;
 
@@ -61,7 +63,7 @@ app.get("/license-status/:discord_id", async (req, res) => {
     const msLeft = expires - now;
     const daysLeft = Math.max(0, Math.floor(msLeft / (1000 * 60 * 60 * 24)));
 
-    res.json({
+    return res.json({
       valid: expires > now,
       role: data.role,
       daysLeft,
@@ -70,16 +72,17 @@ app.get("/license-status/:discord_id", async (req, res) => {
 
   } catch (err) {
     console.error("License check error:", err);
-    res.status(500).json({ valid: false, message: "Server error." });
+    return res.status(500).json({ valid: false, message: "Server error." });
   }
 });
 
-// Start the webhook server
-app.listen(3000, () => {
-  console.log("🌐 Webhook server running");
+// Start webhook server (use Railway's assigned port)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🌐 Webhook server running on port ${PORT}`);
 });
 
-// Handle slash commands
+// Discord event handler
 client.on("interactionCreate", async interaction => {
   if (!interaction.isCommand()) return;
 
@@ -88,17 +91,19 @@ client.on("interactionCreate", async interaction => {
 
   try {
     await command.execute(interaction, client);
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error("Command execution error:", err);
     await interaction.reply({
-      content: "There was an error executing that command.",
-      ephemeral: true,
+      content: "There was an error executing this command.",
+      ephemeral: true
     });
   }
 });
 
+// Bot ready message
 client.once("ready", () => {
   console.log(`✅ AmbiBot is online as ${client.user.tag}`);
 });
 
+// Login bot
 client.login(process.env.DISCORD_TOKEN);
