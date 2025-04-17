@@ -1,5 +1,3 @@
-const fetch = require("node-fetch");
-
 async function validateKey(key) {
   try {
     const res = await fetch(process.env.KEYS_URL);
@@ -14,4 +12,5 @@ async function validateKey(key) {
 }
 
 module.exports = { validateKey };
+
 
