@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
+const { storeRedemption, checkKeyUsed } = require("../utils/supabase");
 const { validateKey } = require("../utils/keyStore");
-const { redeemKey, checkKeyUsed } = require("../utils/supabase");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -11,6 +11,7 @@ module.exports = {
         .setDescription("Your license key")
         .setRequired(true)
     ),
+
   async execute(interaction, client) {
     const key = interaction.options.getString("key");
     const userId = interaction.user.id;
@@ -33,12 +34,22 @@ module.exports = {
     const guild = client.guilds.cache.get(process.env.GUILD_ID);
     const member = await guild.members.fetch(userId).catch(() => null);
     if (!member) {
-      return interaction.reply({ content: "❌ Unable to fetch your Discord profile in the server.", ephemeral: true });
+      return interaction.reply({ content: "❌ Could not find your member profile.", ephemeral: true });
     }
 
-    const { error } = await redeemKey(key, userId, roleName);
+    const now = new Date();
+    const expires = new Date(now.getTime() + (roleName === "Trial" ? 3 : 30) * 86400000);
+
+    const { error } = await storeRedemption({
+      key,
+      discord_id: userId,
+      role: roleName,
+      redeemed_at: now.toISOString(),
+      expires_at: expires.toISOString()
+    });
+
     if (error) {
-      console.error("Supabase error during redemption:", error);
+      console.error("❌ Failed to store redemption:", error);
       return interaction.reply({ content: "❌ There was a problem saving your key. Please try again later.", ephemeral: true });
     }
 
@@ -46,7 +57,7 @@ module.exports = {
     if (role) await member.roles.add(role);
 
     return interaction.reply({
-      content: `✅ Key redeemed successfully! You now have access as **${roleName}**.`,
+      content: `✅ Key redeemed successfully! You now have **${roleName}** access.`,
       ephemeral: true
     });
   }
