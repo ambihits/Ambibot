@@ -1,4 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
+const { createClient } = require("@supabase/supabase-js");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -22,11 +22,15 @@ async function redeemKey(key, discord_id, role) {
       }
     ]);
 
+  if (error) {
+    console.error("🔥 Supabase Insert Error:", error);
+  }
+
   return { data, error };
 }
 
 async function checkKeyUsed(key) {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("redemptions")
     .select("key")
     .eq("key", key)
@@ -36,7 +40,7 @@ async function checkKeyUsed(key) {
 }
 
 async function getDaysLeft(discord_id) {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("redemptions")
     .select("expires_at")
     .eq("discord_id", discord_id)
