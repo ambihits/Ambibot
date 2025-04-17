@@ -19,4 +19,17 @@ async function storeRedemption({ key, discord_id, role, redeemed_at, expires_at 
   return { error };
 }
 
-module.exports = { storeRedemption };
+async function checkKeyUsed(key) {
+  const { data } = await supabase
+    .from("redemptions")
+    .select("key")
+    .eq("key", key)
+    .maybeSingle();
+
+  return !!data;
+}
+
+module.exports = {
+  storeRedemption,
+  checkKeyUsed
+};
