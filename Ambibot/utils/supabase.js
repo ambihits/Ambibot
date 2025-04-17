@@ -1,9 +1,10 @@
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  "https://cspjjcunmdxahmzdbsmr.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzcGpqY3VubWR4YWhtemRic21yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5MTY0MzAsImV4cCI6MjA2MDQ5MjQzMH0.sBWDzpwsES-JfaWhkiNI_SFrbkD1wy-nOi5X1DNmR84" // your anon key
 );
+
 
 async function redeemKey(key, discord_id, role) {
   const duration = role === "Trial" ? 3 : 30;
