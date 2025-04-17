@@ -1,16 +1,27 @@
-async function validateKey(key) {
-  try {
-    const res = await fetch(process.env.KEYS_URL);
-    const data = await res.text();
+const fs = require("fs");
+const path = require("path");
 
-    const keys = data.split(/\r?\n/).map(k => k.trim());
-    return keys.includes(key.trim());
-  } catch (err) {
-    console.error("Key validation failed:", err);
-    return false;
+// Adjust path as needed
+const KEYS_FILE = path.resolve(__dirname, "../../keys.txt");
+
+function readKeysFile() {
+  try {
+    const data = fs.readFileSync(KEYS_FILE, "utf-8");
+    return data
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  } catch (error) {
+    console.error("Failed to read keys file:", error.message);
+    return [];
   }
 }
 
-module.exports = { validateKey };
+function checkKeyUsed(key) {
+  const keys = readKeysFile();
+  return !keys.includes(key);
+}
 
-
+module.exports = {
+  checkKeyUsed,
+};
