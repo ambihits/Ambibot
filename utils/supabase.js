@@ -1,17 +1,19 @@
-// utils/supabase.js
+require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
+function getSupabaseClient() {
+  console.log("🔍 LIVE ENV CHECK");
+  console.log("SUPABASE_URL:", process.env.SUPABASE_URL);
+  console.log("SUPABASE_ANON_KEY:", process.env.SUPABASE_ANON_KEY ? "[FOUND]" : "[MISSING]");
 
-// Log environment values for debugging
-console.log("\n🔍 LIVE ENV CHECK");
-console.log("SUPABASE_URL:", supabaseUrl);
-console.log("SUPABASE_ANON_KEY:", supabaseKey ? "[FOUND]" : "undefined");
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY
+  );
+}
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+module.exports = { getSupabaseClient };
 
-module.exports = supabase;
 
 
 

@@ -1,79 +1,54 @@
-const { SlashCommandBuilder } = require("discord.js");
-const { getSupabaseClient } = require("../utils/supabase");
+const { SlashCommandBuilder } = require('discord.js');
+const { getSupabaseClient } = require('../utils/supabase');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("extend")
-    .setDescription("Extend a user's license")
+    .setName('extend')
+    .setDescription('Extend a user\'s license by a number of days')
     .addUserOption(option =>
-      option.setName("user")
-        .setDescription("The user to extend the license for")
-        .setRequired(true)
-    )
+      option.setName('user')
+        .setDescription('The user to extend')
+        .setRequired(true))
     .addIntegerOption(option =>
-      option.setName("days")
-        .setDescription("Number of days to extend the license")
-        .setRequired(true)
-    ),
-
+      option.setName('days')
+        .setDescription('Number of days to extend')
+        .setRequired(true)),
+  
   async execute(interaction) {
-    const targetUser = interaction.options.getUser("user");
-    const extendDays = interaction.options.getInteger("days");
+    const targetUser = interaction.options.getUser('user');
+    const days = interaction.options.getInteger('days');
+    const discordId = targetUser.id;
+
+    console.log(`🔧 /extend called for Discord ID: ${discordId} with days: ${days}`);
+
     const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('redemptions')
+      .select('*')
+      .eq('discord_id', discordId)
+      .single();
 
-    console.log(`🔧 /extend called for Discord ID: ${targetUser.id} with days: ${extendDays}`);
-
-    try {
-      const { data, error } = await supabase
-        .from("redemptions")
-        .select("*")
-        .eq("discord_id", targetUser.id);
-
-      if (error) {
-        console.error("❌ Supabase read error:", error);
-        return interaction.reply({
-          content: "There was an error fetching the user's license.",
-          ephemeral: true
-        });
-      }
-
-      if (!data || data.length === 0) {
-        return interaction.reply({
-          content: "No license found for this user.",
-          ephemeral: true
-        });
-      }
-
-      const currentLicense = data[0];
-      const newExpiry = new Date(currentLicense.expires_at);
-      newExpiry.setDate(newExpiry.getDate() + extendDays);
-
-      const { error: updateError } = await supabase
-        .from("redemptions")
-        .update({ expires_at: newExpiry.toISOString() })
-        .eq("discord_id", targetUser.id);
-
-      if (updateError) {
-        console.error("❌ Supabase update error:", updateError);
-        return interaction.reply({
-          content: "There was an error updating the license.",
-          ephemeral: true
-        });
-      }
-
-      return interaction.reply({
-        content: `✅ Successfully extended license for <@${targetUser.id}> by ${extendDays} days.`,
-        ephemeral: false
-      });
-
-    } catch (err) {
-      console.error("⚠️ Error executing command:", err);
-      return interaction.reply({
-        content: "An unexpected error occurred while trying to extend the license.",
-        ephemeral: true
-      });
+    if (error || !data) {
+      console.error('❌ Failed to fetch user record:', error || 'User not found');
+      return await interaction.reply({ content: 'User not found in license system.', ephemeral: true });
     }
+
+    const newExpiration = new Date(data.expires_at);
+    newExpiration.setDate(newExpiration.getDate() + days);
+
+    const { error: updateError } = await supabase
+      .from('redemptions')
+      .update({ expires_at: newExpiration.toISOString() })
+      .eq('discord_id', discordId);
+
+    if (updateError) {
+      console.error('❌ Failed to update expiration:', updateError);
+      return await interaction.reply({ content: 'Failed to extend license.', ephemeral: true });
+    }
+
+    await interaction.reply({ content: `✅ Extended license for <@${discordId}> by ${days} days.`, ephemeral: true });
   }
 };
+
 
 

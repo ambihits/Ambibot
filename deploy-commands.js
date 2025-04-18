@@ -1,38 +1,59 @@
-const { REST, Routes } = require("discord.js");
-const fs = require("fs");
 require("dotenv").config();
+const { REST, Routes, SlashCommandBuilder } = require("discord.js");
 
-const clientId = process.env.CLIENT_ID;
-const guildId = process.env.GUILD_ID;
-const token = process.env.DISCORD_TOKEN;
+console.log("🔍 LIVE ENV CHECK");
+console.log("SUPABASE_URL:", process.env.SUPABASE_URL || "undefined");
+console.log("SUPABASE_ANON_KEY:", process.env.SUPABASE_ANON_KEY ? "[FOUND]" : "undefined");
+console.log("DISCORD_TOKEN:", process.env.DISCORD_TOKEN ? "[FOUND]" : "undefined");
+console.log("CLIENT_ID:", process.env.CLIENT_ID || "undefined");
+console.log("GUILD_ID:", process.env.GUILD_ID || "undefined");
 
-if (!clientId || !guildId || !token) {
-  console.error("❌ Missing CLIENT_ID, GUILD_ID, or DISCORD_TOKEN in .env");
-  process.exit(1);
-}
+const commands = [
 
-const commands = [];
-const commandFiles = fs.readdirSync("./commands").filter(file => file.endsWith(".js"));
+  // ✅ /redeem
+  new SlashCommandBuilder()
+    .setName("redeem")
+    .setDescription("Redeem your license key.")
+    .addStringOption(option =>
+      option.setName("key")
+        .setDescription("Your license key")
+        .setRequired(true)
+    ),
 
-for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  if (command.data) {
-    commands.push(command.data.toJSON());
-  }
-}
+  // ✅ /daysleft
+  new SlashCommandBuilder()
+    .setName("daysleft")
+    .setDescription("Check how many days are left on your license."),
 
-const rest = new REST({ version: "10" }).setToken(token);
+  // ✅ /extend (admin only)
+  new SlashCommandBuilder()
+    .setName("extend")
+    .setDescription("Admin command to extend a user’s license.")
+    .addUserOption(option =>
+      option.setName("user")
+        .setDescription("The Discord user to extend")
+        .setRequired(true)
+    )
+    .addIntegerOption(option =>
+      option.setName("days")
+        .setDescription("Number of days to extend")
+        .setRequired(true)
+    )
+].map(command => command.toJSON());
+
+const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
 (async () => {
   try {
     console.log("⌛ Registering slash commands...");
     await rest.put(
-      Routes.applicationGuildCommands(clientId, guildId),
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
-    console.log("✅ Successfully registered application commands.");
+    console.log("✅ Slash commands registered successfully.");
   } catch (error) {
     console.error("❌ Failed to register slash commands:", error);
   }
 })();
+
 
