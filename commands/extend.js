@@ -1,44 +1,59 @@
-const { SlashCommandBuilder } = require("discord.js");
-const { updateExpiration, extendAllUsers } = require("../utils/supabase");
+const { SlashCommandBuilder } = require('discord.js');
+const { supabase } = require('../utils/supabase');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("extend")
-    .setDescription("Extend a user's license or all users")
-    .addUserOption(option =>
-      option.setName("user")
-        .setDescription("User to extend (leave empty for all users)")
-        .setRequired(false))
+    .setName('extend')
+    .setDescription('Extend a user license by a number of days or forever.')
+    .addStringOption(option =>
+      option.setName('discord_id')
+        .setDescription('The Discord ID of the user')
+        .setRequired(true))
     .addIntegerOption(option =>
-      option.setName("days")
-        .setDescription("Number of days to extend")
-        .setRequired(true)),
-
+      option.setName('days')
+        .setDescription('Number of days to extend')
+        .setRequired(false)),
   async execute(interaction) {
-    const adminId = "YOUR_DISCORD_ID"; // Replace with your own Discord ID
+    const discordId = interaction.options.getString('discord_id');
+    const days = interaction.options.getInteger('days');
 
-    if (interaction.user.id !== adminId) {
-      return await interaction.reply({ content: "🚫 You are not authorized to use this command.", ephemeral: true });
+    console.log(`🔧 /extend called for Discord ID: ${discordId} with days: ${days}`);
+
+    const { data, error } = await supabase
+      .from('redemptions')
+      .select('*')
+      .eq('discord_id', discordId)
+      .single();
+
+    if (error || !data) {
+      console.error('❌ Could not find redemption for user:', error || 'No data found');
+      return interaction.reply({ content: 'User not found in database.', ephemeral: true });
     }
 
-    const user = interaction.options.getUser("user");
-    const days = interaction.options.getInteger("days");
-
-    if (user) {
-      const result = await updateExpiration(user.id, days);
-
-      if (result.success) {
-        await interaction.reply(`✅ License for <@${user.id}> extended by ${days} day(s). New expiration: ${result.newDate}`);
-      } else {
-        await interaction.reply(`❌ Failed to extend license for <@${user.id}>.`);
-      }
+    let newExpiration;
+    if (days === null) {
+      newExpiration = new Date('2099-12-31T23:59:59Z'); // lifetime
     } else {
-      const result = await extendAllUsers(days);
-      if (result.success) {
-        await interaction.reply(`✅ All users extended by ${days} day(s).`);
-      } else {
-        await interaction.reply("❌ Failed to extend licenses globally.");
-      }
+      const currentExp = new Date(data.expires_at);
+      currentExp.setUTCDate(currentExp.getUTCDate() + days);
+      newExpiration = currentExp;
     }
-  }
+
+    const { error: updateError } = await supabase
+      .from('redemptions')
+      .update({ expires_at: newExpiration.toISOString() })
+      .eq('discord_id', discordId);
+
+    if (updateError) {
+      console.error('❌ Failed to update expiration:', updateError);
+      return interaction.reply({ content: 'Failed to update expiration.', ephemeral: true });
+    }
+
+    const finalMsg = days === null
+      ? `✅ Extended ${discordId} to lifetime.`
+      : `✅ Extended ${discordId} by ${days} day(s).`;
+
+    return interaction.reply({ content: finalMsg, ephemeral: false });
+  },
 };
+
