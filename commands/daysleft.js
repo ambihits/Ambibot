@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
-const { getSupabaseClient } = require("../utils/supabase");
+const supabase = require('../utils/supabase');
+
 
 module.exports = {
   data: new SlashCommandBuilder()
