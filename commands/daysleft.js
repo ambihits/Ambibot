@@ -1,51 +1,52 @@
 const { SlashCommandBuilder } = require("discord.js");
-const supabase = require('../utils/supabase');
-
+const supabase = require("../utils/supabase");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("daysleft")
-    .setDescription("Check how many days are left on your license"),
-
+    .setDescription("Check how many days remain on your license."),
   async execute(interaction) {
+    const discordId = interaction.user.id;
+    console.log(`📆 /daysleft called for Discord ID: ${discordId}`);
+
     try {
-      const discordId = interaction.user.id;
-      console.log(`📆 /daysleft called for Discord ID: ${discordId}`);
+      const { data, error } = await supabase
+        .from("redemptions")
+        .select("*")
+        .eq("discord_id", discordId)
+        .order("expires_at", { ascending: false });
 
-      const supabase = getSupabaseClient();
-
-     const { data, error } = await supabase
-  .from("redemptions")
-  .select("*")
-  .eq("discord_id", discordId)
-  .order("redeemed_at", { ascending: false }) // <- sort newest first
-  .limit(1)
-  .single(); // now it's safe
-
-      if (error || !data) {
+      if (error) {
         console.error("❌ Supabase Error:", error);
         return interaction.reply({
-          content: "Could not find a license associated with your Discord account.",
+          content: "There was a problem fetching your license.",
           ephemeral: true,
         });
       }
 
-      const expiresAt = new Date(data.expires_at);
-      const now = new Date();
-      const daysLeft = Math.max(0, Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24)));
+      if (!data || data.length === 0) {
+        return interaction.reply({
+          content: "No license was found for your Discord ID.",
+          ephemeral: true,
+        });
+      }
 
-      return interaction.reply({
-        content: `Your license expires on **${expiresAt.toDateString()}**.\nYou have **${daysLeft} day(s)** left.`,
+      const latest = data[0];
+      const now = new Date();
+      const expires = new Date(latest.expires_at);
+      const diffTime = expires - now;
+      const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      await interaction.reply({
+        content: `⏳ You have **${daysLeft} days** left on your **${latest.role}** license.\n\n🗓️ Expires on: ${expires.toLocaleString()}`,
         ephemeral: true,
       });
     } catch (err) {
-      console.error("⚠️ Error executing /daysleft:", err);
+      console.error("❌ Unexpected Error in /daysleft:", err);
       return interaction.reply({
-        content: "An unexpected error occurred while checking your license.",
+        content: "Unexpected error occurred while checking your license.",
         ephemeral: true,
       });
     }
   },
 };
-
-
