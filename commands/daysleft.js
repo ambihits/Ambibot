@@ -1,21 +1,50 @@
 const { SlashCommandBuilder } = require("discord.js");
-const { getDaysLeft } = require("../utils/supabase");
+const { getSupabaseClient } = require("../utils/supabase");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("daysleft")
     .setDescription("Check how many days are left on your license"),
+
   async execute(interaction) {
-    const userId = interaction.user.id;
-    const daysLeft = await getDaysLeft(userId);
+    try {
+      const discordId = interaction.user.id;
+      console.log(`📆 /daysleft called for Discord ID: ${discordId}`);
 
-    if (daysLeft === null) {
-      return interaction.reply({ content: "❌ You haven’t redeemed a license key yet.", ephemeral: true });
+      const supabase = getSupabaseClient();
+
+      const { data, error } = await supabase
+        .from("redemptions")
+        .select("expires_at")
+        .eq("discord_id", discordId)
+        .single();
+
+      if (error || !data) {
+        console.error("❌ Supabase Error:", error);
+        return interaction.reply({
+          content: "Could not find a license associated with your Discord account.",
+          ephemeral: true,
+        });
+      }
+
+      const expiresAt = new Date(data.expires_at);
+      const now = new Date();
+      const timeDiff = expiresAt.getTime() - now.getTime();
+      const daysLeft = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
+
+      console.log(`✅ License expires on ${expiresAt.toISOString()} | ${daysLeft} days left`);
+
+      return interaction.reply({
+        content: `Your license expires on **${expiresAt.toDateString()}**.\nYou have **${daysLeft} day(s)** left.`,
+        ephemeral: true,
+      });
+    } catch (err) {
+      console.error("⚠️ Error executing /daysleft:", err);
+      return interaction.reply({
+        content: "An unexpected error occurred while checking your license.",
+        ephemeral: true,
+      });
     }
-
-    return interaction.reply({
-      content: `🧾 You have **${daysLeft} day${daysLeft === 1 ? "" : "s"}** remaining on your license.`,
-      ephemeral: true
-    });
-  }
+  },
 };
+
