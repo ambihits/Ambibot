@@ -1,52 +1,36 @@
 const { SlashCommandBuilder } = require("discord.js");
-const supabase = require("../utils/supabase");
+const { getSupabaseClient } = require("../utils/supabase");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("daysleft")
-    .setDescription("Check how many days remain on your license."),
+    .setDescription("Check how many days are left on your license."),
+
   async execute(interaction) {
-    const discordId = interaction.user.id;
-    console.log(`📆 /daysleft called for Discord ID: ${discordId}`);
+    const discord_id = interaction.user.id;
+    const supabase = getSupabaseClient();
 
-    try {
-      const { data, error } = await supabase
-        .from("redemptions")
-        .select("*")
-        .eq("discord_id", discordId)
-        .order("expires_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("valid_keys")
+      .select("expires_at")
+      .eq("discord_id", discord_id)
+      .maybeSingle();
 
-      if (error) {
-        console.error("❌ Supabase Error:", error);
-        return interaction.reply({
-          content: "There was a problem fetching your license.",
-          ephemeral: true,
-        });
-      }
-
-      if (!data || data.length === 0) {
-        return interaction.reply({
-          content: "No license was found for your Discord ID.",
-          ephemeral: true,
-        });
-      }
-
-      const latest = data[0];
-      const now = new Date();
-      const expires = new Date(latest.expires_at);
-      const diffTime = expires - now;
-      const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      await interaction.reply({
-        content: `⏳ You have **${daysLeft} days** left on your **${latest.role}** license.\n\n🗓️ Expires on: ${expires.toLocaleString()}`,
-        ephemeral: true,
-      });
-    } catch (err) {
-      console.error("❌ Unexpected Error in /daysleft:", err);
+    if (error || !data) {
       return interaction.reply({
-        content: "Unexpected error occurred while checking your license.",
-        ephemeral: true,
+        content: "❌ Could not find your license. Please redeem a key first.",
+        ephemeral: true
       });
     }
+
+    const now = new Date();
+    const expiration = new Date(data.expires_at);
+    const diffDays = Math.ceil((expiration - now) / (1000 * 60 * 60 * 24));
+
+    return interaction.reply({
+      content: `📆 You have ${diffDays} day(s) left. License expires <t:${Math.floor(expiration.getTime() / 1000)}:R>.`,
+      ephemeral: true
+    });
   },
 };
+

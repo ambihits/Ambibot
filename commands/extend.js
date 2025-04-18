@@ -1,57 +1,54 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
-const supabase = require("../utils/supabase");
+const { SlashCommandBuilder } = require("discord.js");
+const { getSupabaseClient } = require("../utils/supabase");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("extend")
-    .setDescription("Manually extend a user's license.")
-    .addUserOption((option) =>
+    .setDescription("Extend a user's license.")
+    .addUserOption(option =>
       option.setName("user").setDescription("User to extend").setRequired(true)
     )
-    .addIntegerOption((option) =>
-      option
-        .setName("days")
-        .setDescription("Number of days to extend")
-        .setRequired(true)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .addIntegerOption(option =>
+      option.setName("days").setDescription("Number of days to extend").setRequired(true)
+    ),
+
   async execute(interaction) {
-    const targetUser = interaction.options.getUser("user");
+    const user = interaction.options.getUser("user");
     const days = interaction.options.getInteger("days");
 
-    const discord_id = targetUser?.id;
-    const now = new Date();
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("valid_keys")
+      .select("*")
+      .eq("discord_id", user.id)
+      .maybeSingle();
 
-    console.log(`🔧 /extend called for Discord ID: ${discord_id} with days: ${days}`);
-
-    if (!discord_id || !days || days <= 0) {
+    if (error || !data) {
       return interaction.reply({
-        content: "❌ Invalid user or days value.",
-        ephemeral: true,
+        content: `⚠️ Failed to find license for <@${user.id}>.`,
+        ephemeral: true
       });
     }
 
-    const new_expiration = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const newExpiration = new Date(data.expires_at);
+    newExpiration.setDate(newExpiration.getDate() + days);
 
-    const { error } = await supabase.from("redemptions").insert({
-      key: "manual-extend",
-      discord_id,
-      role: "Manual",
-      redeemed_at: now.toISOString(),
-      expires_at: new_expiration.toISOString(),
-    });
+    const { error: updateError } = await supabase
+      .from("valid_keys")
+      .update({ expires_at: newExpiration.toISOString() })
+      .eq("discord_id", user.id);
 
-    if (error) {
-      console.error("❌ Supabase Extend Error:", error);
+    if (updateError) {
       return interaction.reply({
-        content: "❌ Failed to extend the license.",
-        ephemeral: true,
+        content: `⚠️ Failed to update license: ${updateError.message}`,
+        ephemeral: true
       });
     }
 
-    await interaction.reply({
-      content: `✅ Extended <@${discord_id}>'s license by **${days} days** (now expires on ${new_expiration.toLocaleString()}).`,
-      ephemeral: true,
+    return interaction.reply({
+      content: `✅ Extended <@${user.id}>'s license by ${days} days. New expiration: <t:${Math.floor(newExpiration.getTime() / 1000)}:R>.`,
+      ephemeral: true
     });
   },
 };
+
