@@ -1,78 +1,68 @@
 const { SlashCommandBuilder } = require("discord.js");
-const supabase = require("../utils/supabase");
-const fs = require("fs");
-const path = require("path");
-
-const keyFilePath = path.join(__dirname, "..", "key.txt");
+const { getSupabaseClient } = require("../utils/supabase");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("redeem")
-    .setDescription("Redeem a license key.")
-    .addStringOption((option) =>
-      option
-        .setName("key")
-        .setDescription("The license key to redeem.")
-        .setRequired(true)
+    .setDescription("Redeem your license key")
+    .addStringOption(option =>
+      option.setName("key").setDescription("Your license key").setRequired(true)
     ),
   async execute(interaction) {
+    const supabase = getSupabaseClient();
     const key = interaction.options.getString("key").trim();
-    const discord_id = interaction.user.id;
+    const discordId = interaction.user.id;
+
+    // Fetch the key from Supabase
+    const { data, error } = await supabase
+      .from("valid_keys")
+      .select("*")
+      .eq("key", key)
+      .single();
+
+    if (error || !data) {
+      return interaction.reply({ content: "❌ Invalid license key.", ephemeral: true });
+    }
+
+    if (data.used) {
+      return interaction.reply({ content: "❌ This key has already been redeemed.", ephemeral: true });
+    }
+
     const now = new Date();
-
-    console.log(`🔑 /redeem called with key: ${key} for Discord ID: ${discord_id}`);
-
-    if (!fs.existsSync(keyFilePath)) {
-      return interaction.reply({
-        content: "❌ License key store is missing.",
-        ephemeral: true,
-      });
-    }
-
-    const keyList = fs.readFileSync(keyFilePath, "utf-8").split(/\r?\n/).filter(Boolean);
-    const keyExists = keyList.includes(key);
-
-    console.log(`🔎 Key "${key}" found in list: ${keyExists}`);
-
-    if (!keyExists) {
-      return interaction.reply({
-        content: "❌ This key is invalid or already used.",
-        ephemeral: true,
-      });
-    }
-
-    const role = key.startsWith("TRIAL-") ? "Trial" : "Premium";
-    const expires_at = new Date(now.getTime() + (role === "Trial" ? 3 : 30) * 24 * 60 * 60 * 1000);
-
-    const payload = {
-      key,
-      discord_id,
-      role,
-      redeemed_at: now.toISOString(),
-      expires_at: expires_at.toISOString(),
-    };
-
-    console.log("🚀 Inserting into Supabase:", JSON.stringify(payload, null, 2));
-
-    const { error } = await supabase.from("redemptions").insert(payload);
-
-    if (error) {
-      console.error("🔥 Supabase Insert Error:", error);
-      return interaction.reply({
-        content: "❌ Failed to store redemption.",
-        ephemeral: true,
-      });
-    }
-
-    // Remove key from file
-    fs.writeFileSync(
-      keyFilePath,
-      keyList.filter((k) => k !== key).join("\n")
+    const expiresAt = new Date(
+      data.type === "Trial"
+        ? now.getTime() + 3 * 24 * 60 * 60 * 1000
+        : now.getTime() + 30 * 24 * 60 * 60 * 1000
     );
 
-    await interaction.reply({
-      content: `✅ Key redeemed successfully! You now have a **${role}** license until **${expires_at.toLocaleString()}**.`,
-      ephemeral: true,
+    const { error: updateError } = await supabase
+      .from("valid_keys")
+      .update({
+        used: true,
+        redeemed_by: discordId,
+        redeemed_at: now.toISOString()
+      })
+      .eq("key", key);
+
+    if (updateError) {
+      return interaction.reply({ content: "❌ Error redeeming key. Try again later.", ephemeral: true });
+    }
+
+    await supabase
+      .from("redemptions")
+      .insert({
+        key,
+        discord_id: discordId,
+        role: data.type,
+        redeemed_at: now.toISOString(),
+        expires_at: expiresAt.toISOString()
+      });
+
+    interaction.reply({
+      content: `✅ Successfully redeemed **${data.type}** key. Expires <t:${Math.floor(expiresAt.getTime() / 1000)}:R>.`,
+      ephemeral: true
     });
-  },
+  }
 };
+
+
