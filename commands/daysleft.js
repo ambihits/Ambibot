@@ -29,10 +29,7 @@ module.exports = {
 
       const expiresAt = new Date(data.expires_at);
       const now = new Date();
-      const timeDiff = expiresAt.getTime() - now.getTime();
-      const daysLeft = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
-
-      console.log(`✅ License expires on ${expiresAt.toISOString()} | ${daysLeft} days left`);
+      const daysLeft = Math.max(0, Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24)));
 
       return interaction.reply({
         content: `Your license expires on **${expiresAt.toDateString()}**.\nYou have **${daysLeft} day(s)** left.`,
@@ -47,4 +44,5 @@ module.exports = {
     }
   },
 };
+
 
