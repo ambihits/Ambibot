@@ -13,11 +13,13 @@ module.exports = {
 
       const supabase = getSupabaseClient();
 
-      const { data, error } = await supabase
-        .from("redemptions")
-        .select("expires_at")
-        .eq("discord_id", discordId)
-        .single();
+     const { data, error } = await supabase
+  .from("redemptions")
+  .select("*")
+  .eq("discord_id", discordId)
+  .order("redeemed_at", { ascending: false }) // <- sort newest first
+  .limit(1)
+  .single(); // now it's safe
 
       if (error || !data) {
         console.error("❌ Supabase Error:", error);
